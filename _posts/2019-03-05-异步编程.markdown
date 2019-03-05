@@ -1,0 +1,446 @@
+---
+layout:     keynote
+title:      "异步编程"
+subtitle:   "🎞  Slides:JavaScript Modularization Journey"
+iframe:     "//huangxuan.me/js-module-7day/"
+date:       2015-07-09
+author:     "Hux"
+tags:
+    - Slides
+    - Web
+    - JavaScript
+---
+
+.NET 与C# 的每个版本发布都是有一个“主题”。即：
+
+> `C#1.0`托管代码→`C#2.0`泛型→`C#3.0`LINQ→`C#4.0`动态语言→`C#5.0`(NET Framework4.5)异步编程。
+
+![这里写图片描述](https://img-blog.csdn.net/20180614210428162)
+
+|C#版本|.NET Framework版本|CLR版本|VisualStudio版本|
+|:--|:--|:--|:--|
+|C#1.0|.NET Framework 1.0|CLR1.0|Visual Studio 2002|
+|C#1.2|.NET Framework 1.1|CLR1.1|Visual Studio 2003|
+|C#2.0|.NET Framework 2.0|CLR2.0|Visual Studio 2005|
+|C#3.0|.NET Framework 2.0|CLR2.0|Visual Studio 2008|
+||.NET Framework 3.0|||
+||.NET Framework 3.5|||
+|C#4.0|.NET Framework 4.0|CLR4.0|Visual Studio 2010|
+|C#5.0|.NET Framework 4.5|CLR4.0|Visual Studio 2012|
+||||Visual Studio 2013|
+|C#6.0|.NET Framework 4.6|CLR4.0|Visual Studio 2015|
+
+
+----------
+
+大部分开发人员，在开发多线程应用程序时，都是使用`ThreadPool`的`QueueUserWorkItem`方法来发起一次简单的异步操作。然而，这种方式存在许多限制。最大的问题是没有一个内建的机制让你知道操作在什么时候完成，也没有一个机制在操作完成时让你知道是否能获得一个返回值。为了克服这些限制（并解决一些其他问题），Microsoft引入了三种异步编程模式：
+1. .NET1.0异步编程模型 (APM)，基于`IAsyncResult`接口实现。
+2. .NET2.0基于事件的异步编程模式(EMP)，基于事件实现。
+3. .NET4.X基于任务的异步编程模式(TAP)，新型异步编程模式，对于.NET4.0之后的异步结构都推荐使用此模式
+
+
+# 异步编程
+
+一般需要I/O绑定（例如从网络请求数据或访问数据库），则需要使用异步编程。还可以使用 CPU 绑定（例如执行成本高昂的计算）。
+
+C# 5.0拥有语言级别的异步编程模型，它使你能轻松编写异步代码。 它遵循[基于任务的异步模式 (TAP)]()。
+
+## 异步模型的基本概述
+
+异步编程的核心是 `Task` 和 `Task<TResult>` 对象，它们受关键字 `async` 和 `await` 的支持。在大多数情况下十分简单： 
+
+对于I/O绑定代码，当你 `await` 一个操作，它将返回 `async` 方法中的一个 `Task` 或 `Task<TResult>`。
+
+对于 CPU密集型代码，当你 `await` 一个操作，它将在后台线程通过 `Task.Run` 方法启动。
+
+
+### I/O密集型示例：从 Web 服务下载数据
+
+你可能需要在按下按钮时从 Web 服务下载某些数据，但不希望阻止 UI 线程。只需执行如下操作即可轻松实现：
+
+```csharp
+private readonly HttpClient _httpClient = new HttpClient();
+
+//注册事件
+downloadButton.Clicked += async (o, e) =>
+{ 
+    var stringData = await _httpClient.GetStringAsync(URL);
+    DoSomethingWithData(stringData);
+};
+```
+
+### CPU密集型示例：为游戏执行计算
+
+假设你正在编写一个移动游戏，在该游戏中，按下某个按钮将会对屏幕中的许多敌人造成伤害。  执行伤害计算的开销可能极大，而且在 UI 线程中执行计算有可能使游戏在计算执行过程中暂停！
+
+此问题的最佳解决方法是启动一个后台线程，它使用 `Task.Run` 执行工作，并 `await` 其结果。  这可确保在执行工作时 UI 能流畅运行。
+
+```csharp
+private DamageResult CalculateDamageDone()
+{
+     //进行计算并返回该计算结果。
+}
+
+
+calculateButton.Clicked += async (o, e) =>
+{
+    //CalculateDamageDone()执行其工作。UI线程可以自由地执行其他工作。
+    var damageResult = await Task.Run(() => CalculateDamageDone());
+    DisplayDamage(damageResult);
+};
+```
+### 内部原理
+
+在 `C#` 方面，编译器将代码转换为状态机，它将跟踪类似以下内容：碰到 `await` 时会让步执行(`yielding execution`)，等后台作业完成时继续执行。
+
+## 需了解的要点
+
+*   异步代码可用于 I/O密集型和 CPU密集型代码，但在每个方案中有所不同。
+*   异步代码使用 `Task<TResult>` 和 `Task`对象，它们是对后台所完成的任务进行构建。
+*   `async` 关键字将方法转换为异步方法，这使你能在其正文中使用 `await` 关键字。
+*   应用 `await` 关键字后，它将挂起调用方法，并将控制权返还给调用方，直到等待的任务完成。
+*   `await`仅允许在异步方法中使用 。
+
+![这里写图片描述](https://img-blog.csdn.net/20180614221113166)
+
+## 识别 CPU密集型和 I/O密集型工作
+
+确定所需执行的操作是 I/O密集型或 CPU密集型是关键，因为这会极大影响代码效率，并可能导致某些结构的误用。
+
+以下是编写代码前应考虑的两个问题：
+
+1. 你的代码是否会“等待”某些内容，例如数据库中的数据？
+
+    如果答案为“是”，则你的工作是 **I/O密集型**。
+
+2. 你的代码是否要执行开销巨大的计算？
+
+    如果答案为“是”，则你的工作是 **CPU密集型**。
+    
+如果你的工作为 **I/O密集型**，请使用 `async` 和 `await`（而不使用 `Task.Run`）。 
+
+如果你的工作为 **CPU密集型**，并且你重视响应能力，请使用 `async` 和 `await`，使用 `Task.Run` 在另一个线程上生成任务。如果该任务同时适用于并发和并行，则应考虑使用任务并行库。
+
+也许，你可能会遇到这样的情况：多线程处理时，CPU中上下文切换的开销高于 CPU 计算工作的开销。每种选择都有折衷，应根据自身情况选择正确的折衷方案。
+
+### 从网络提取数据
+
+此代码片段从 `www.baidu.com` 下载 HTML，并对 HTML 中出现字符串“baidu”的次数计数。
+
+```csharp
+private readonly HttpClient _httpClient = new HttpClient();
+
+[HttpGet]
+[Route("DotNetCount")]
+public async Task<int> GetDotNetCountAsync()
+{
+    
+    //挂起GetDotNetCountAsync（）以允许调用者（Web服务器）接受另一个请求，而不是阻止此请求。
+    var html = await _httpClient.GetStringAsync("http://www.baidu.com");
+
+    return Regex.Matches(html, @"baidu").Count;
+}
+```
+
+
+## 重要
+
+*  `async`方法需在其主体中具有`await` 关键字！
+
+ 如果 `await` 未用在 `async` 方法的主体中，C# 编译器将生成一个警告，但此代码将会以类似普通方法的方式运行。这会导致效率低下，因为编译器会使用状态机重新编写该方法的实现，C# 编译器为异步方法生成的状态机将不会完成任何任务。
+
+*   应将“`Async`”作为后缀添加到所编写的每个异步方法名称中。
+    这是 .NET 中的惯例，以便更轻松区分同步和异步方法。 
+
+*   `async void` **应仅用于事件处理程序。**
+     `async void` 是允许异步事件处理程序工作的唯一方法，因为事件不具有返回类型（因此无法利用 `Task` 和 `Task<T>`）。 其他任何对 `async void` 的使用都不是遵循 `TAP` 模型的，且可能存在一定使用难度，例如：
+ 1. `async void` 方法中引发的异常无法在该方法外部被捕获。
+ 2. 十分难以测试 `async void` 方法。
+
+
+- 采用非阻塞方式编写等待任务的代码
+  如果将阻塞当前线程作为等待`Task`完成的一种方式，可能导致死锁和已阻塞的上下文线程，且可能需要更复杂的错误处理。下表提供了关于如何以非阻塞方式处理等待`Tasks`：
+
+| 使用以下方式...| 而不是… |若要执行此操作 |
+|---|---|---|
+|`await`| `Task.Wait` 或 `Task.Result`| 检索后台任务的结果 |
+| `await Task.WhenAny` | `Task.WaitAny` | 等待任何任务完成 |
+| `await Task.WhenAll` | `Task.WaitAll` | 等待所有任务完成 |
+| `await Task.Delay` | `Thread.Sleep` | 等待一段时间 |
+
+
+----------
+
+# 进一步了解异步
+
+##`Task`和 `Task<TResult>`
+
+*   `Task` 表示不返回值的单个操作。
+*   `Task<TResult>` 表示返回 `TResult` 类型的值的单个操作。
+
+请务必将任务理解为工作的异步抽象，而非在线程之上的抽象。 默认情况下，任务在当前线程上执行，且在适当时会将任务委托给操作系统。可选择的,通过 `Task.Run` API 显式请求任务在独立线程上运行。
+
+对一个task（任务），`Tasks`提供了API用于监控，等待和访问返回值（使用`Task<TResult>`时）。而关键字`await`则在语言层面上为tasks的使用提供了更高层别的抽象。
+
+使用`await`允许你的应用程序或服务在运行一个`task`时，转让控制权给此task的调度者以更有效地工作，直至此task执行完毕。 任务完成后代码无需依靠回调或事件便可继续执行。语言和任务API 会为你完成此操作。
+
+## 深入了解 I/O密集型 的任务
+
+以下部分介绍了使用典型异步 I/O 调用时会出现的各种情况。
+
+调用一个`async`方法并且返回一个可能尚未完成的活动任务。
+```csharp
+public Task<string> GetHtmlAsync()
+{
+    //这里的执行是同步的
+    var client = new HttpClient();
+
+    return client.GetStringAsync("http://www.dotnet.org");
+}
+```
+
+使用了 `async` 和 `await` 关键字对任务进行操作。
+
+```csharp
+public async Task<string> GetFirstCharactersCountAsync(string url, int count)
+{
+    //这里的执行是同步的
+    var client = new HttpClient();
+    
+    // GetFirstCharactersCountAsync()的执行在这里让步,控制权会移交此方法的caller
+    // GetStringAsync返回 Task<string>
+    var page = await client.GetStringAsync("http://www.dotnet.org");
+     
+    //当client.GetStringAsync任务完成时执行继续，再次变为同步。
+    if (count > page.Length)
+    {
+        return page;
+    }
+    else
+    {
+        return page.Substring(0, count);
+    }
+}
+```
+方法`GetStringAsync()`会调用一系列的底层.net库（可能会调用其它的`async`方法）直到它通过`P/Invoke`方式调用到一个本地网络库。这个本地库可能会后续调用系统API（比如Linux上调用socket的write）。在本地/托管的交互边界，会创建一个task对象，并被层层向上传递，中途可能会被操作或是直接返回，最后返回给初始的c`这里写代码片`aller。
+
+ 在第二个例子中，`GetStringAsync`方法会返回一个`Task<T>`对象。 由于使用了 `await`，此方法会返回一个新创建的task对象。在这个点，控制权会移交给`GetFirstCharactersCountAsync`方法的**caller**。`Task<T>`的方法和属性使得`callers`可以监控这个task的进度，这个task会在`GetFirstCharactersCountAsync`方法的剩余代码执行后才真正结束。
+ 
+ 
+整个的处理过程，一个关键点是：在处理任务的过程中，没有线程在等待，**没有线程专用于运行任务**。虽然工作是在一定的上下文中处理的（比如，OS必须把数据传递给设备驱动程序并且响应中断），但没有任何线程浪费在等待数据从请求至返回的过程中。这可以大大提升系统的吞吐量，而不是把时间浪费在等待I/O调用完成上。
+  
+
+## 深入了解 CPU密集型 的任务
+
+使用`async`编写CPU密集型问题的代码与编写I/O密集型的代码有一点不同。因为工作是在CPU上完成的，在执行计算时是无法将CPU线程释放出来的。`async`和`await`提供了一种清晰的与后台线程的交互方式，同时又能使`async`方法的调用者保持响应。不为共享数据提供任何保护。如果你正在使用共享数据，你依然需要应用合适的数据同步策略。
+
+下面是CPU密集型的`async`方法演示：
+   
+```csharp
+public async Task<int> CalculateResult(InputData data)
+{ 
+    //使线程池上线程排队
+    var expensiveResultTask = Task.Run(() => DoExpensiveCalculation(data));
+    
+  
+    //可以同时执行其他一些工作，因为CalculateResult()仍在执行中！
+    
+    //CalculateResult的执行在这里让步！ 
+    var result = await expensiveResultTask;
+    
+    return result;
+}
+```
+
+`CalculateResult`方法是在调用者的线程上执行的。当其调用`Task.Run`方法，它将代价昂贵的CPU操作`DoExpensiveCalculation`向线程池中入队，并返回一个`Task<int>`句柄。`DoExpensiveCalculation()`最终会在下一个可用线程上并发执行，可能在另一个单独的CPU核上。当`DoExpensiveCalculation()`在另一个线程上执行时，是可以并发地做其它工作的，因为调用`CalculateResult()`的线程还在跑。
+
+一旦执行到`await`时，`CalculateResult()`的执行便会移交给它的调用者，允许`DoExpensiveCalculation()`计算结果时，当前线程依然可以执行其它的工作。一旦计算结束，结果会被入队，等待在主线程上运行。最后，主线程会返回到`DoExpensiveCalculation`的执行点，取得结果，并继续向下运行。
+
+当你需要处理CPU密集型的工作，但是又需要响应能力时，`async`和`await`是最佳实践。
+
+----------
+
+# 异步返回类型
+异步方法可以具有以下返回类型：
+
+- `Task<TResult>`（用于有返回值的异步方法）。 
+ 
+-  `Task`（用于执行操作但不返回任何值的异步方法）。
+
+- `void`（用于事件处理程序）。 
+  
+##  `Task<TResult>`返回类型  
+ 
+```csharp
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+
+public class Example
+{
+   public static void Main()
+   {
+      Console.WriteLine(ShowTodaysInfo().Result);
+   }
+
+   private static async Task<string> ShowTodaysInfo()
+   {
+      string ret = $"Today is {DateTime.Today:D}\n" +
+                   "Today's hours of leisure: " +
+                   $"{await GetLeisureHours()}";
+      return ret;
+   }
+
+   static async Task<int> GetLeisureHours()  
+   {  
+       // Task.FromResult 创建指定结果的、成功完成的Task<TResult>  
+       var today = await Task.FromResult<string>(DateTime.Now.DayOfWeek.ToString());  
+      
+       int leisureHours;  
+       if (today.First() == 'S')  
+           leisureHours = 16;  
+       else  
+           leisureHours = 5;  
+     
+       return leisureHours;  
+   }  
+}
+// 该示例显示如下输出：
+//       Today is Wednesday, May 24, 2017
+//       Today's hours of leisure: 5
+```
+
+在 `ShowTodaysInfo` 方法中从 `await` 表达式内调用 `GetLeisureHours` 时，`await` 表达式检索存储在由 `GetLeisureHours` 方法返回的任务中的整数值（`leisureHours` 的值）。 
+  
+
+##  `Task`返回类型  
+不包含 `return` 语句的异步方法或包含不返回操作数的 `return` 语句的异步方法通常具有返回类型  `Task`。 如果此类方法同步运行，它们将返回 `void`。 如果在异步方法中使用  `Task` 返回类型，调用方法可以使用 `await` 运算符暂停调用方的完成，直至被调用的异步方法结束。  
+  
+如下示例中，`WaitAndApologize` 异步方法不包含 `return` 语句，因此此方法返回  `Task` 对象。 通过这样可等待 `WaitAndApologize`。 请注意， `Task` 类型不包含 `Result` 属性，因为它不具有任何返回值。  
+
+```csharp
+using System;
+using System.Threading.Tasks;
+
+public class Example
+{
+   public static void Main()
+   {
+      DisplayCurrentInfo().Wait();  //异步转同步,等待 Task 完成执行过程
+   }
+
+   static async Task DisplayCurrentInfo()
+   {
+      await WaitAndApologize();
+      Console.WriteLine($"Today is {DateTime.Now:D}");
+      Console.WriteLine($"The current time is {DateTime.Now.TimeOfDay:t}");
+      Console.WriteLine("The current temperature is 76 degrees.");
+   }
+
+   static async Task WaitAndApologize()
+   { 
+      await Task.Delay(2000);  
+      //Task.Delay将以下行延迟两秒。 
+      Console.WriteLine("\nSorry for the delay. . . .\n");  
+   }
+}
+// 该示例显示以下输出：
+//       Sorry for the delay. . . .
+//       
+//       Today is Wednesday, May 24, 2017
+//       The current time is 15:25:16.2935649
+//       The current temperature is 76 degrees.
+```
+通过使用 `await` 语句而不是 `await` 表达式等待 `WaitAndApologize`，类似于返回 `void` 的同步方法的调用语句。 `await` 运算符的应用程序在这种情况下不生成值。  
+  
+ 
+##  Void 返回类型  
+在异步事件处理程序中使用 `void` 返回类型，这需要 `void` 返回类型。 对于事件处理程序以外的不返回值的方法，应返回  `Task`，因为无法等待返回 `void` 的异步方法。 这种方法的任何调用方必须能够继续完成，而无需等待调用的异步方法完成，并且调用方必须独立于异步方法生成的任何值或异常。  
+  
+返回 `void` 的异步方法的调用方无法捕获从该方法引发的异常，且此类未经处理的异常可能会导致应用程序故障。 如果返回  `Task` 或 `Task<TResult>`  的异步方法中出现异常，此异常将存储于返回的任务中，并在等待该任务时再次引发。因此，请确保可以产生异常的任何异步方法都具有返回类型  `Task` 或 `Task<TResult>` ，并确保会等待对方法的调用。  
+ 
+----------
+
+# 异步其他使用 (C#)
+本部分介绍使用 ` CancellationToken ` 的示例和一些重要的 `Task` 方法，例如 `Task.WhenAll` 和 `Task.WhenAny`。  
+  
+使用 `WhenAny` 和 `WhenAll` 可以更轻松地启动多个任务并通过监听单个任务待其完成。  
+  
+-   集合中的任何任务完成时，`WhenAny` 将返回完成的任务。    
+-   集合中的所有任务完成时，`WhenAll` 将返回完成的任务。  
+  
+## `Task WhenAll`、`WhenAny` 创建任务的任务
+
+###使用 `Task.WhenAll`
+此方法以异步方式等待多个异步操作。  
+ 
+可将 `Task.WhenAll` 方法应用于任务的集合。 `WhenAll` 返回单个任务，直到集合中的每个任务都已完成之后，该任务才会完成。 任务会表现为并行运行，但不会创建其他额外线程。 任务可以按任何顺序完成。  
+ 
+```csharp
+var firstTask = new Task<int>(() => TaskMethod("First Task", 3));
+var secondTask = new Task<int>(() => TaskMethod("Second Task", 2));
+var whenAllTask = Task.WhenAll(firstTask, secondTask);
+whenAllTask.ContinueWith(t =>Console.WriteLine("The first answer is {0}, the second is {1}", t.Result[0], t.Result[1]),
+TaskContinuationOptions.OnlyOnRanToCompletion
+);  //先驱任务成功完成，才会执行此延续任务
+
+firstTask.Start();
+secondTask.Start();
+```
+这里设置了一个名字为`whenAllTask`的变量，他是用静态方法`Task.WhenAll`创建的第三个任务。需要注意的是，由于是基于前面两个任务创建的，因此返回的类型为`Task<int[]>`。在`firstTask`和`secondTask`运行完毕后（`WhenAll`），采用后续操作（`ContinueWith`），函数中的t其实也就是`whenAllTask`的传参。后续操作打印出`whenAllTask`中的`Result`数组成员，后续操作的状态条件为`whenAllTask`的状态为`OnlyOnRanToCompletion`。 
+
+###使用`Task.WhenAny`
+`WhenAny`表示任意一个`Task`完成之后，返回这个`Task`对象
+
+```csharp
+//向应该被取消的 CancellationToken 发送信号
+static CancellationTokenSource C1 = new CancellationTokenSource();     
+public async void OpeartTask()
+        {
+           
+            List<Task<string>> TaskList = new List<Task<string>>() {
+                Task.Factory.StartNew(()=> { return WriteHello(10); },C1.Token),
+                Task.Factory.StartNew(()=> { return WriteHello(20); },C1.Token),
+                Task.Factory.StartNew(()=> { return WriteHello(30); },C1.Token),
+                Task.Factory.StartNew(()=> { return WriteHello(40); },C1.Token)
+            };
+            
+            var Reuslt = await Task.WhenAny(TaskList);
+            //IsCompleted 在任务处于以下三个最终状态之一时返回 true：RanToCompletion、Faulted 或 Canceled。
+            if (Reuslt.IsCompleted)
+            {
+                Console.WriteLine("I'm "+Reuslt.Result+" OK,Other Must Stop");
+                C1.Cancel();
+            }
+}
+```
+在指定的毫秒数后取消,我们可以通过在创建`CancellationTokenSource`时设置超时来实现这一功能。
+
+```csharp
+//var cancelTokenSource = new CancellationTokenSource(3000);
+//除此之外，也可以通过如下代码实现同样的效果。
+//cancelTokenSource.CancelAfter(3000);  
+```
+
+**另一示例**
+
+首先建立一个`Task List`，名字为tasks。而后依次向里添加新任务实例。而后，监控tasks中的任务数量，在循环中创建`completedTask`任务，用来表示任一个在tasks中已经完成操作的`Task`，如果一个任务都没运行完成，则`WhenAny(tasks).Result`阻止调用线程，直至异步操作已完成。这里的`WhenAny(tasks).Result`指的是`Task<int>`，也就是完成的`Task<int>`实例。 
+
+```csharp
+var tasks = new List<Task<int>>();
+for (int i = 1; i < 4; i++)
+{
+int counter = i;
+var task = new Task<int>(() => TaskMethod(string.Format("Task {0}", counter), counter));
+tasks.Add(task);
+task.Start();
+}
+
+while (tasks.Count > 0)
+{
+var completedTask = Task.WhenAny(tasks).Result;//这里的WhenAny(tasks).Result是指代Task<int>!
+tasks.Remove(completedTask);
+Console.WriteLine("A task has been completed with result {0}.", completedTask.Result);
+}
+
+```
