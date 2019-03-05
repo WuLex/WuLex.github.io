@@ -1,10 +1,10 @@
 ---
 layout:     keynote
 title:      "异步编程"
-subtitle:   "🎞  Slides:JavaScript Modularization Journey"
+subtitle:   "NET"
 iframe:     "//huangxuan.me/js-module-7day/"
-date:       2015-07-09
-author:     "Hux"
+date:       2019-03-05
+author:     "Wu"
 tags:
     - Slides
     - Web
